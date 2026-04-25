@@ -40,3 +40,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Nested local environments and generated backend files
+**/.venv/
+**/__pycache__/
+backend/storage/
+!.env.example
+!**/.env.example

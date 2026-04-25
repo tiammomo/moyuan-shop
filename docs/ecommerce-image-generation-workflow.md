@@ -26,17 +26,18 @@
 - 已有前端静态页面：首页、项目列表、新建项目、模板中心。
 - 已有前端常量和类型定义：`frontend/src/lib/constants.ts`、`frontend/src/types/api.ts`。
 - 已有 API 设计文档：`docs/api.md`。
+- 已有 `backend/` FastAPI MVP 骨架。
+- 后端当前使用 mock image provider，不直接调用 `gpt-image-2`。
 - 已安装前端/设计和电商生图相关本地 skills 到 `.claude/skills/`。
 
 ### 2.2 尚未同步或尚未实现内容
 
 当前代码仍处于规划和早期前端原型阶段，以下内容尚未完全实现：
 
-- 尚未创建 `backend/` FastAPI 服务。
 - 前端目前主要是静态 Mock 数据，尚未接入真实 API。
 - 前端枚举与 API 文档存在命名差异，后续需要统一。
-- 尚未实现商品上传、生图任务创建、任务轮询、结果画廊和导出。
-- 尚未实现 Prompt 模板渲染、任务队列、数据库、对象存储和权限系统。
+- 前端尚未实现商品上传、生图任务创建、任务轮询、结果画廊和导出。
+- 后端尚未实现真实 `gpt-image-2` provider、Prompt 模板渲染、任务队列、数据库、对象存储和权限系统。
 
 ### 2.3 当前需要统一的命名差异
 
@@ -685,7 +686,7 @@ MVP 完成必须满足：
 
 - FastAPI 服务可以启动并返回 `GET /api/health`。
 - 前端可以创建一个生图任务。
-- 后端可以调用 `gpt-image-2` 并保存图片。
+- 后端可以通过 mock provider 保存图片；切换真实 provider 后可调用 `gpt-image-2`。
 - 前端可以轮询任务状态。
 - 前端可以展示生成结果。
 - 任务详情中可以查看状态、模型参数和错误信息。
@@ -697,7 +698,7 @@ MVP 完成必须满足：
 ### 17.1 M0：服务闭环
 
 1. 创建 `backend/` FastAPI 骨架。
-2. 封装当前 `test_gpt_image_2.py` 的模型调用逻辑。
+2. 封装 ImageProvider 接口，首版使用 mock provider。
 3. 实现本地存储。
 4. 实现最小任务 API。
 5. 前端接入创建任务和轮询结果。
