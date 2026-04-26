@@ -2,10 +2,10 @@ import Link from "next/link";
 import styles from "./page.module.css";
 
 const templates = [
-  { id: 'main', name: '商品主图', desc: '白底高清主图，适合电商平台', icon: '◫', color: '#3B82F6' },
-  { id: 'scene', name: '场景图', desc: '融入生活场景，提升表现力', icon: '◬', color: '#8B5CF6' },
-  { id: 'detail', name: '详情页', desc: '多图连续叙述，完整展示', icon: '◭', color: '#10B981' },
-  { id: 'poster', name: '营销海报', desc: '活动推广物料，引流转化', icon: '◮', color: '#F59E0B' },
+  { id: 'main_image', name: '商品主图', desc: '白底高清主图，适合电商平台', icon: '◫', color: '#3B82F6' },
+  { id: 'lifestyle_scene', name: '场景图', desc: '融入生活场景，提升表现力', icon: '◬', color: '#8B5CF6' },
+  { id: 'detail_set', name: '详情页套图', desc: '多图连续叙述，完整展示', icon: '◭', color: '#10B981' },
+  { id: 'campaign', name: '营销海报', desc: '活动推广物料，引流转化', icon: '◮', color: '#F59E0B' },
 ];
 
 const features = [

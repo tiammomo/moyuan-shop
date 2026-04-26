@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["development", "test", "production"]
@@ -28,8 +28,17 @@ class Settings(BaseSettings):
     default_quality: ImageQuality = "low"
     default_output_format: OutputFormat = "jpeg"
     default_output_compression: int = Field(default=50, ge=0, le=100)
-    generation_timeout_seconds: int = Field(default=120, ge=1)
+    generation_timeout_seconds: int = Field(default=900, ge=1)
     max_generation_count: int = Field(default=4, ge=1, le=50)
+
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        validation_alias=AliasChoices("OPENAI_BASE_URL", "MOYUAN_OPENAI_BASE_URL"),
+    )
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "MOYUAN_OPENAI_API_KEY"),
+    )
 
     database_url: str = "sqlite:///./moyuan_shop.db"
     redis_url: str = "redis://localhost:6379/0"

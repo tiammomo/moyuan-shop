@@ -1,23 +1,25 @@
 import Link from 'next/link';
+import { BUILT_IN_PROMPT_TEMPLATES } from '@/lib/promptTemplates';
 import styles from './page.module.css';
 
-const templates = [
-  { id: '1', name: '商品主图-简约白底', type: 'main', uses: 234, updated: '2天前' },
-  { id: '2', name: '商品主图-高级灰', type: 'main', uses: 156, updated: '3天前' },
-  { id: '3', name: '场景图-家居风格', type: 'scene', uses: 189, updated: '1天前' },
-  { id: '4', name: '场景图-户外旅行', type: 'scene', uses: 98, updated: '5天前' },
-  { id: '5', name: '营销海报-促销活动', type: 'poster', uses: 312, updated: '今天' },
-  { id: '6', name: '营销海报-新品上市', type: 'poster', uses: 245, updated: '昨天' },
-  { id: '7', name: '详情页-多图展示', type: 'detail', uses: 178, updated: '4天前' },
-  { id: '8', name: '社交-小红书种草', type: 'social', uses: 421, updated: '今天' },
-];
-
 const typeLabels: Record<string, string> = {
-  main: '商品主图',
-  scene: '场景图',
-  poster: '营销海报',
-  detail: '详情页',
-  social: '社交媒体',
+  main_image: '商品主图',
+  lifestyle_scene: '场景图',
+  campaign: '营销海报',
+  detail_image: '详情页单图',
+  detail_set: '详情页套图',
+  social_post: '社交媒体',
+  variant_batch: '色系变体',
+};
+
+const typeIcons: Record<string, string> = {
+  main_image: '◫',
+  lifestyle_scene: '◬',
+  campaign: '◮',
+  detail_image: '◭',
+  detail_set: '◭',
+  social_post: '◯',
+  variant_batch: '◱',
 };
 
 export default function TemplatesPage() {
@@ -59,28 +61,31 @@ export default function TemplatesPage() {
         </div>
 
         <div className={styles.templatesGrid}>
-          {templates.map((tmpl) => (
+          {BUILT_IN_PROMPT_TEMPLATES.map((tmpl) => (
             <div key={tmpl.id} className={styles.templateCard}>
               <div className={styles.templatePreview}>
                 <span className={styles.templateIcon}>
-                  {tmpl.type === 'main' && '◫'}
-                  {tmpl.type === 'scene' && '◬'}
-                  {tmpl.type === 'poster' && '◮'}
-                  {tmpl.type === 'detail' && '◭'}
-                  {tmpl.type === 'social' && '◯'}
+                  {typeIcons[tmpl.imageType]}
                 </span>
               </div>
               <div className={styles.templateInfo}>
                 <h3 className={styles.templateName}>{tmpl.name}</h3>
-                <span className={styles.templateType}>{typeLabels[tmpl.type]}</span>
+                <span className={styles.templateType}>{typeLabels[tmpl.imageType]}</span>
+                <p className={styles.templateDesc}>{tmpl.description}</p>
+                <p className={styles.templatePrompt}>{tmpl.prompt.split('\n')[0]}</p>
                 <div className={styles.templateMeta}>
-                  <span>{tmpl.uses} 次使用</span>
+                  <span>内置模板</span>
                   <span>·</span>
-                  <span>{tmpl.updated}</span>
+                  <span>{tmpl.placeholders.length} 个可替换参数</span>
                 </div>
               </div>
               <div className={styles.templateActions}>
-                <button className={styles.actionBtn}>使用</button>
+                <Link
+                  className={styles.actionBtn}
+                  href={`/projects/new?template=${tmpl.id}&type=${tmpl.imageType}`}
+                >
+                  使用
+                </Link>
                 <button className={styles.actionBtn}>编辑</button>
               </div>
             </div>

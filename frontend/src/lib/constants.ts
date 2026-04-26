@@ -5,6 +5,7 @@ export const API_ENDPOINTS = {
   products: '/api/projects/:projectId/products',
   product: '/api/products/:productId',
   assets: {
+    upload: '/api/assets',
     uploadUrl: '/api/assets/upload-url',
     complete: '/api/assets/complete',
     get: '/api/assets/:assetId',
@@ -13,6 +14,7 @@ export const API_ENDPOINTS = {
   generationTasks: {
     list: '/api/generation-tasks',
     create: '/api/generation-tasks',
+    promptPreview: '/api/generation-tasks/prompt-preview',
     get: '/api/generation-tasks/:taskId',
     cancel: '/api/generation-tasks/:taskId/cancel',
     retry: '/api/generation-tasks/:taskId/retry',
@@ -25,18 +27,16 @@ export const API_ENDPOINTS = {
     export: '/api/generation-results/:resultId/export',
   },
   templates: {
-    list: '/api/templates',
-    create: '/api/templates',
-    get: '/api/templates/:templateId',
-    update: '/api/templates/:templateId',
-    delete: '/api/templates/:templateId',
+    list: '/api/prompt-templates',
+    create: '/api/prompt-templates',
+    get: '/api/prompt-templates/:templateId',
+    update: '/api/prompt-templates/:templateId',
+    delete: '/api/prompt-templates/:templateId',
   },
 };
 
 export const IMAGE_SIZES = {
   '1024x1024': { label: '1:1 (方形)', width: 1024, height: 1024 },
-  '1024x1792': { label: '9:16 (竖版)', width: 1024, height: 1792 },
-  '1792x1024': { label: '16:9 (横版)', width: 1792, height: 1024 },
   '1536x1024': { label: '3:2 (横向)', width: 1536, height: 1024 },
   '1024x1536': { label: '2:3 (竖向)', width: 1024, height: 1536 },
 };
@@ -48,11 +48,13 @@ export const IMAGE_QUALITIES = {
 };
 
 export const IMAGE_TYPES = {
-  main: { label: '商品主图', icon: '◫' },
-  scene: { label: '场景图', icon: '◬' },
-  detail_page: { label: '详情页', icon: '◭' },
-  poster: { label: '营销海报', icon: '◮' },
-  social: { label: '社交媒体', icon: '◯' },
+  main_image: { label: '商品主图', icon: '◫' },
+  lifestyle_scene: { label: '场景图', icon: '◬' },
+  detail_image: { label: '详情页单图', icon: '◭' },
+  detail_set: { label: '详情页套图', icon: '◭' },
+  campaign: { label: '营销海报', icon: '◮' },
+  social_post: { label: '社交媒体', icon: '◯' },
+  variant_batch: { label: '批量变体', icon: '◱' },
 };
 
 export const TASK_STATUS_LABELS: Record<string, { label: string; color: string }> = {

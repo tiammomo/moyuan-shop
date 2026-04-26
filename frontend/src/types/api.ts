@@ -26,7 +26,7 @@ export interface Asset {
   id: string;
   project_id: string;
   product_id: string;
-  asset_type: 'source' | 'result' | 'thumbnail' | 'export';
+  asset_type: 'product_source' | 'reference_image' | 'brand_asset' | 'generated_image' | 'thumbnail' | 'export_zip';
   storage_key: string;
   url: string;
   mime_type: string;
@@ -38,7 +38,14 @@ export interface Asset {
 }
 
 export type GenerationTaskStatus = 'created' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
-export type ImageType = 'main' | 'scene' | 'detail_page' | 'poster' | 'social';
+export type ImageType =
+  | 'main_image'
+  | 'lifestyle_scene'
+  | 'detail_image'
+  | 'detail_set'
+  | 'campaign'
+  | 'social_post'
+  | 'variant_batch';
 
 export interface GenerationTask {
   id: string;
@@ -49,10 +56,12 @@ export interface GenerationTask {
   image_type: ImageType;
   template_id: string;
   template_version: number;
+  source_asset_ids: string[];
   input_params: GenerationInputParams;
   rendered_prompt: string;
   model: string;
   model_params: Record<string, unknown>;
+  count: number;
   error_code: string | null;
   error_message: string | null;
   request_id: string | null;
@@ -64,12 +73,19 @@ export interface GenerationTask {
 
 export interface GenerationInputParams {
   prompt: string;
-  size: '1024x1024' | '1024x1792' | '1792x1024' | '1536x1024' | '1024x1536';
+  size: '1024x1024' | '1536x1024' | '1024x1536';
   quality: 'low' | 'medium' | 'high';
   output_format: 'jpeg' | 'png' | 'webp';
+  output_compression?: number;
+  platform?: string;
+  aspect_ratio?: string;
   style?: string;
   background?: string;
+  lighting?: string;
   composition?: string;
+  scene?: string;
+  include_text?: boolean;
+  text_requirements?: string | null;
   negative_constraints?: string[];
 }
 
@@ -78,6 +94,8 @@ export interface GenerationResult {
   task_id: string;
   asset_id: string;
   thumbnail_asset_id: string;
+  url: string;
+  thumbnail_url: string | null;
   width: number;
   height: number;
   format: string;
@@ -85,6 +103,12 @@ export interface GenerationResult {
   score: number | null;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+
+export interface PromptPreview {
+  optimized_prompt: string | null;
+  rendered_prompt: string;
+  warnings: string[];
 }
 
 export interface PromptTemplate {

@@ -12,16 +12,37 @@ IMAGE_TYPE_LABELS = {
 }
 
 
+def optimize_user_prompt(value: str | None) -> str | None:
+    if not value:
+        return None
+
+    normalized = " ".join(value.replace("\n", " ").split())
+    if not normalized:
+        return None
+
+    return (
+        "Refined creative direction: "
+        f"{normalized}. "
+        "Translate this into a commercially usable ecommerce visual with a clear product hero, "
+        "controlled composition, realistic lighting, platform-safe negative space, and no unsupported product claims."
+    )
+
+
 def build_prompt(request: GenerationTaskCreate) -> str:
     params = request.params
+    optimized_prompt = optimize_user_prompt(params.prompt)
     prompt_parts = [
         f"Create a high-quality {IMAGE_TYPE_LABELS[request.image_type]}.",
         f"Project id: {request.project_id}.",
     ]
     if request.product_id:
         prompt_parts.append(f"Product id: {request.product_id}.")
-    if params.prompt:
-        prompt_parts.append(f"User direction: {params.prompt}")
+    if request.source_asset_ids:
+        prompt_parts.append(
+            "Use the uploaded source image as the factual product reference and preserve its visible appearance."
+        )
+    if optimized_prompt:
+        prompt_parts.append(optimized_prompt)
     if params.scene:
         prompt_parts.append(f"Scene: {params.scene}.")
     if params.background:
@@ -38,6 +59,8 @@ def build_prompt(request: GenerationTaskCreate) -> str:
             "Preserve the product's core shape, color, structure, quantity, and visible details.",
             "Do not add logos, certifications, prices, ratings, or claims unless explicitly provided.",
             "Avoid misleading effects or exaggerated product performance.",
+            "Do not use protected brands, characters, celebrities, competitor logos, or unsupported IP elements.",
+            "Exact text should be added by the frontend as an editable overlay when possible.",
         ]
     )
     if request.negative_constraints:

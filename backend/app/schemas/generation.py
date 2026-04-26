@@ -45,6 +45,12 @@ class GenerationTaskCreate(BaseModel):
     count: int = Field(default=1, ge=1, le=50)
 
 
+class PromptPreviewRead(BaseModel):
+    optimized_prompt: str | None = None
+    rendered_prompt: str
+    warnings: list[str] = Field(default_factory=list)
+
+
 class GenerationTaskRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,10 +62,12 @@ class GenerationTaskRead(BaseModel):
     image_type: ImageType
     template_id: str | None = None
     template_version: int | None = None
+    source_asset_ids: list[str] = Field(default_factory=list)
     input_params: dict[str, Any]
     rendered_prompt: str
     model: str
     model_params: dict[str, Any]
+    count: int = 1
     error_code: str | None = None
     error_message: str | None = None
     request_id: str | None = None

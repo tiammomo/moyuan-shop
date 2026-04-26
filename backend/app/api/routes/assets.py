@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from app.core.store import store
@@ -53,7 +53,7 @@ def get_asset(asset_id: str) -> DataResponse[AssetRead]:
 
 
 @router.get("/{asset_id}/file")
-def get_asset_file(asset_id: str) -> FileResponse:
+def get_asset_file(asset_id: str, download: bool = Query(default=False)) -> FileResponse:
     with store.lock:
         asset = store.assets.get(asset_id)
     if not asset:
@@ -64,4 +64,5 @@ def get_asset_file(asset_id: str) -> FileResponse:
         raise HTTPException(status_code=400, detail="Invalid storage key") from exc
     if not path.exists():
         raise HTTPException(status_code=404, detail="Asset file not found")
-    return FileResponse(path=path, media_type=asset["mime_type"])
+    filename = path.name if download else None
+    return FileResponse(path=path, media_type=asset["mime_type"], filename=filename)

@@ -18,6 +18,7 @@ def get_image_generation_settings() -> dict:
             "generation_timeout_seconds": settings.generation_timeout_seconds,
             "max_generation_count": settings.max_generation_count,
             "image_provider": settings.image_provider,
-            "poll_interval_seconds": 3,
+            "poll_interval_seconds": 5,
+            "max_poll_duration_seconds": 1200,
         }
     }
