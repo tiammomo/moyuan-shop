@@ -302,15 +302,19 @@ Prompt 模板用于把结构化业务参数渲染为最终模型 Prompt。
 3. 用户上传商品原图或参考图。
 4. 用户选择图片类型。
 5. 用户填写场景、风格、背景、构图、平台和尺寸参数。
-6. 前端提交结构化请求到 FastAPI。
-7. 后端校验参数和资产权限。
-8. 后端选择 Prompt 模板并渲染最终 Prompt。
-9. 后端创建 GenerationTask，状态为 queued。
-10. Worker 调用 gpt-image-2。
-11. 后端解码 b64_json，保存生成图和缩略图。
-12. 后端更新任务状态和结果数据。
-13. 前端轮询任务状态并展示结果。
-14. 用户收藏、重试、创建变体或导出。
+6. 前端调用 Prompt 预览接口，后端优化用户提示词并渲染最终 Prompt。
+7. 前端展示优化后的最终 Prompt，用户确认。
+8. 前端提交结构化请求到 FastAPI。
+9. 后端校验参数和资产权限。
+10. 后端选择 Prompt 模板并渲染最终 Prompt。
+11. 后端创建 GenerationTask，状态为 queued。
+12. Worker 调用 gpt-image-2。
+13. 后端解码 b64_json，保存生成图和缩略图。
+14. 后端更新任务状态和结果数据。
+15. 前端轮询任务状态，等待过程中展示阶段、已耗时和长任务提示。
+16. 前端展示结果图和原图对比。
+17. 成功后的图片暂存到本地 `storage/generated/`，前端提供下载入口。
+18. 用户收藏、重试、创建变体或导出。
 ```
 
 ### 8.2 批量变体流程
@@ -426,19 +430,26 @@ FastAPI 后端负责：
 - `GenerationTypeSelector`
 - `GenerationParamForm`
 - `PromptSummaryCard`
+- `PromptPreviewPanel`
 - `GenerationProgressCard`
 - `ResultGallery`
 - `ImageComparePanel`
 - `VariantMatrix`
 - `ExportPanel`
 
+当前 MVP 可先在页面内实现等待体验、结果画廊和下载入口，后续再拆分为上述组件。
+
 ### 10.5 前端状态规范
 
 - 服务端数据通过 API 获取，不长期写死在页面组件中。
 - 表单状态保留在页面或局部组件中。
-- 长任务使用轮询，默认间隔 2-3 秒。
+- 创建任务前先预览优化后的最终 Prompt，用户确认后再提交生图任务。
+- 长任务使用轮询，默认间隔 5 秒，最长自动检查 20 分钟。
+- 等待过程必须展示当前阶段、已耗时和长任务说明，避免只显示静态 loading。
+- 等待过程可展示 `frontend/public/gif/` 下的动效资源；每次任务开始随机选择一个，长等待时每 15 秒切换一次。前端引用应优先使用 ASCII 文件名，避免中文、空格和括号导致静态资源路径兼容问题。
 - 任务状态为 `succeeded`、`failed`、`cancelled` 时停止轮询。
 - 错误展示必须面向用户，不直接暴露上游原始错误。
+- 任务成功后必须展示生成结果，并提供下载入口。
 
 ### 10.6 视觉规范
 
@@ -504,12 +515,29 @@ MVP 只要求实现：
 GET  /api/health
 POST /api/assets
 GET  /api/assets/{asset_id}/file
+POST /api/generation-tasks/prompt-preview
 POST /api/generation-tasks
 GET  /api/generation-tasks/{task_id}
 GET  /api/generation-tasks/{task_id}/results
 ```
 
 完整 API 以 `docs/api.md` 为准。
+
+### 11.2.1 多参考图图生图流程
+
+前端允许用户一次选择一张或多张商品参考图，用于生成单张目标图或按 `count` 生成多张目标图。多图输入流程如下：
+
+```text
+1. 用户选择多张商品参考图，最多 16 张
+2. 前端调用 POST /api/generation-tasks/prompt-preview，按选择数量传入临时 source_asset_ids，展示优化后的 Prompt
+3. 用户开始生成后，前端逐张调用 POST /api/assets 上传参考图
+4. 前端收集所有返回的 asset_id，并在 POST /api/generation-tasks 中写入 source_asset_ids
+5. 后端校验每个 source_asset_id 对应的资产存在且为 image/*
+6. ImageProvider 在同一次图生图请求中使用全部 source_images 作为参考输入；OpenAI 图片编辑请求使用重复的 multipart `image` 字段传递多张图
+7. 生成成功后，前端展示生成图和全部参考图对比，并提供下载入口
+```
+
+多参考图用于融合商品外观、结构、颜色、材质、包装、细节或不同角度信息；输出数量仍由 `count` 控制，`source_asset_ids` 的数量不代表输出图片数量。超过 16 张时前端应截取并提示，后端必须拒绝创建任务，避免静默丢图。
 
 ### 11.3 ImageProvider 规范
 
@@ -564,6 +592,8 @@ created -> queued -> cancelled
 ### 12.1 Prompt 构建原则
 
 - 前端提交结构化字段。
+- 后端先将用户提示词优化为电商可用创意方向。
+- 前端可展示优化后的最终 Prompt 供用户确认。
 - 后端根据 `image_type` 选择模板。
 - 后端渲染最终 Prompt。
 - 任务保存模板 ID、模板版本、变量和最终 Prompt。
@@ -592,6 +622,27 @@ created -> queued -> cancelled
 - 不使用受保护品牌、角色、名人或竞品元素。
 - exact text 优先由前端叠加，不依赖模型生成。
 
+### 12.4 MVP 内置 Prompt 模板
+
+MVP 阶段先把常用电商 Prompt 模板写入前端共享常量，代码位置为 `frontend/src/lib/promptTemplates.ts`。`/templates` 模板中心和 `/projects/new` 新建任务页必须读取同一份内置模板，避免展示模板和实际可用模板不一致。
+
+当前内置模板：
+
+| 模板 ID | 名称 | 默认图片类型 | 建议尺寸 | 用途 |
+| --- | --- | --- | --- | --- |
+| `white-background-main` | 白底主图（平台合规） | `main_image` | `1024x1024` | 平台白底主图，无道具、无文字、无 Logo |
+| `forty-five-degree` | 45度角展示图 | `detail_image` | `1024x1024` | 展示产品立体感和设计细节 |
+| `lifestyle-scene` | 生活场景图 | `lifestyle_scene` | `1536x1024` | 展示使用氛围和生活方式场景 |
+| `macro-detail` | 产品细节特写图 | `detail_image` | `1024x1024` | 展示材质、纹理、工艺和品质感 |
+| `size-reference` | 尺寸参照对比图 | `detail_image` | `1024x1024` | 用常见参照物帮助理解尺寸 |
+| `color-variant` | 多色系变体展示图 | `variant_batch` | `1024x1024` | 保持角度和光照一致，生成不同颜色选项 |
+| `in-use-demo` | 产品使用演示图 | `lifestyle_scene` | `1536x1024` | 展示产品被使用时的自然状态 |
+| `complete-set-flatlay` | 组合套装图 / 全家福 | `detail_set` | `1024x1024` | 展示套装和配件完整内容物 |
+
+模板中的 `[YOUR PRODUCT]` 和 `[PRODUCT SET]` 可由前端根据商品名称或商品描述自动替换；其他占位符应保留在 Prompt 中，提醒用户继续补充场景、材质、参照物或颜色等关键信息。
+
+后续实现 `PromptTemplate` API 和数据库后，应将这些内置模板迁移为系统预置模板，并继续保持模板 ID 稳定，便于旧任务追溯和复用。
+
 ## 13. 存储 Spec
 
 ### 13.1 MVP 存储
@@ -606,7 +657,7 @@ storage/
   exports/
 ```
 
-当前已有调试输出位于 `output/`，后续应用级产物应迁移到 `storage/`。
+MVP 生成图固定暂存到后端工作目录下的 `storage/generated/`，缩略图暂存到 `storage/thumbnails/`。当前已有调试输出位于 `output/`，后续应用级产物应迁移到 `storage/`。
 
 ### 13.2 生产存储
 
@@ -736,4 +787,3 @@ MVP 完成必须满足：
 - 前端页面路由和组件名称
 
 如果 API 枚举发生变化，必须同步更新前端常量和类型定义。
-

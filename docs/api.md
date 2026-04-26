@@ -474,7 +474,13 @@ GET /api/assets/{asset_id}
 GET /api/assets/{asset_id}/file
 ```
 
-MVP 可直接返回文件流。生产环境可返回重定向或签名 URL。
+MVP 可直接返回文件流。前端需要触发浏览器下载时可追加查询参数：
+
+```http
+GET /api/assets/{asset_id}/file?download=1
+```
+
+带 `download=1` 时后端返回附件文件名，便于成功生图后提供下载入口。生产环境可返回重定向或签名 URL。
 
 ### 7.6 删除资产
 
@@ -485,6 +491,8 @@ DELETE /api/assets/{asset_id}
 ## 8. Prompt 模板 API
 
 Prompt 模板由后端使用，用于把结构化业务参数渲染为最终 `gpt-image-2` Prompt。
+
+MVP 阶段允许先在前端代码中提供系统内置模板，代码位置为 `frontend/src/lib/promptTemplates.ts`。这些模板用于快速填充 `params.prompt`，最终仍必须经由 `POST /api/generation-tasks/prompt-preview` 和 `POST /api/generation-tasks` 交给后端优化、渲染和保存。后续实现本章 API 后，应将内置模板迁移为后端可管理的系统预置模板。
 
 ### 8.1 获取模板列表
 
@@ -594,7 +602,29 @@ POST /api/prompt-templates/{template_id}/preview
 
 生图任务是系统核心。前端创建任务后立即得到 `task_id`，再通过轮询或事件接口获取状态。
 
-### 9.1 创建生图任务
+### 9.1 预览优化后的 Prompt
+
+前端在创建任务前应先调用该接口，将结构化字段交给后端优化并渲染最终 Prompt。前端展示 `rendered_prompt` 给用户确认，随后使用同一组结构化参数创建生图任务。后端创建任务时仍会重新渲染最终 Prompt，确保任务记录可追溯。
+
+```http
+POST /api/generation-tasks/prompt-preview
+```
+
+请求：同 `POST /api/generation-tasks` 的请求体，可在尚未正式上传源图时使用临时 `source_asset_ids` 仅用于 Prompt 预览。若前端已选择多张参考图但尚未上传，可按选择数量传入多个临时 ID，便于后端在 Prompt 预览中识别这是多图图生图任务。
+
+响应：
+
+```json
+{
+  "data": {
+    "optimized_prompt": "Refined creative direction: Product name: ...",
+    "rendered_prompt": "Create a high-quality ecommerce product main image...",
+    "warnings": []
+  }
+}
+```
+
+### 9.2 创建生图任务
 
 ```http
 POST /api/generation-tasks
@@ -608,7 +638,7 @@ POST /api/generation-tasks
   "product_id": "product_01",
   "image_type": "main_image",
   "template_id": "template_01",
-  "source_asset_ids": ["asset_01"],
+  "source_asset_ids": ["asset_01", "asset_02", "asset_03"],
   "params": {
     "platform": "taobao",
     "aspect_ratio": "1:1",
@@ -633,6 +663,12 @@ POST /api/generation-tasks
 }
 ```
 
+说明：
+
+- `source_asset_ids` 可为空；为空时按纯文本生图处理。
+- `source_asset_ids` 可包含一张或多张 `product_source` / `reference_image` 资产，最多 16 张；包含多张时，后端必须把这些源图作为同一次图生图请求的参考输入，目标仍是生成一张或多张输出图，由 `count` 决定输出数量。
+- 前端上传多张图时应先逐张调用 `POST /api/assets`，收集返回的 `asset_id` 后再创建任务。
+
 响应：
 
 ```json
@@ -652,7 +688,7 @@ POST /api/generation-tasks
 }
 ```
 
-### 9.2 获取任务列表
+### 9.3 获取任务列表
 
 ```http
 GET /api/generation-tasks?project_id=project_01&product_id=product_01&status=succeeded&page=1&page_size=20
@@ -683,7 +719,7 @@ GET /api/generation-tasks?project_id=project_01&product_id=product_01&status=suc
 }
 ```
 
-### 9.3 获取任务详情
+### 9.4 获取任务详情
 
 ```http
 GET /api/generation-tasks/{task_id}
@@ -728,7 +764,7 @@ GET /api/generation-tasks/{task_id}
 }
 ```
 
-### 9.4 获取任务结果
+### 9.5 获取任务结果
 
 ```http
 GET /api/generation-tasks/{task_id}/results
@@ -760,7 +796,7 @@ GET /api/generation-tasks/{task_id}/results
 }
 ```
 
-### 9.5 取消任务
+### 9.6 取消任务
 
 ```http
 POST /api/generation-tasks/{task_id}/cancel
@@ -768,7 +804,7 @@ POST /api/generation-tasks/{task_id}/cancel
 
 说明：只有 `created` 或 `queued` 状态可靠可取消。`running` 状态可标记取消，但上游模型请求可能无法中断。
 
-### 9.6 重试任务
+### 9.7 重试任务
 
 ```http
 POST /api/generation-tasks/{task_id}/retry
@@ -797,7 +833,7 @@ POST /api/generation-tasks/{task_id}/retry
 }
 ```
 
-### 9.7 创建变体任务
+### 9.8 创建变体任务
 
 ```http
 POST /api/generation-tasks/{task_id}/variants
@@ -982,7 +1018,8 @@ GET /api/settings/image-generation
     "default_output_format": "jpeg",
     "default_output_compression": 50,
     "max_batch_count": 12,
-    "poll_interval_seconds": 3
+    "poll_interval_seconds": 5,
+    "max_poll_duration_seconds": 1200
   }
 }
 ```
@@ -1050,23 +1087,29 @@ data: {"task_id":"task_01","result_count":1}
 前端流程：
 
 ```text
-1. POST /api/generation-tasks
-2. 保存返回的 task_id
-3. 每 2-3 秒 GET /api/generation-tasks/{task_id}
-4. status 为 succeeded 时 GET /api/generation-tasks/{task_id}/results
-5. status 为 failed 时展示 error_message 和重试入口
+1. POST /api/generation-tasks/prompt-preview 预览优化后的最终 Prompt
+2. 用户确认后 POST /api/generation-tasks
+3. 保存返回的 task_id
+4. 每 5 秒 GET /api/generation-tasks/{task_id}，最长自动检查 20 分钟
+5. 等待过程中展示阶段状态、已耗时、轮询说明、长任务提示和等待动效
+6. status 为 succeeded 时 GET /api/generation-tasks/{task_id}/results
+7. 成功后展示结果图，并用 `/api/assets/{asset_id}/file?download=1` 提供下载入口
+8. status 为 failed 时展示 error_message 和重试入口
 ```
 
-### 16.2 上传商品图并创建任务
+### 16.2 上传一张或多张商品参考图并创建任务
 
 前端流程：
 
 ```text
-1. POST /api/assets 上传商品图
-2. 创建或更新商品 cover_asset_id
-3. POST /api/generation-tasks，source_asset_ids 包含商品图 asset_id
-4. 轮询任务状态
-5. 展示生成图和原图对比
+1. POST /api/generation-tasks/prompt-preview 预览优化后的最终 Prompt
+2. 用户可选择一张或多张商品参考图，最多 16 张
+3. 对每张参考图分别 POST /api/assets 上传，资产类型使用 product_source 或 reference_image
+4. 创建或更新商品 cover_asset_id；多图场景可用第一张作为封面
+5. POST /api/generation-tasks，source_asset_ids 包含全部参考图 asset_id
+6. 轮询任务状态
+7. 展示生成图和全部参考图对比
+8. 提供生成图下载入口
 ```
 
 ### 16.3 批量变体
@@ -1089,6 +1132,7 @@ data: {"task_id":"task_01","result_count":1}
 GET  /api/health
 POST /api/assets
 GET  /api/assets/{asset_id}/file
+POST /api/generation-tasks/prompt-preview
 POST /api/generation-tasks
 GET  /api/generation-tasks/{task_id}
 GET  /api/generation-tasks/{task_id}/results
@@ -1102,7 +1146,7 @@ MVP 可简化：
 - 暂不实现 SSE
 - 暂不实现对象存储
 - 任务可先用内存或 SQLite，后续迁移 PostgreSQL
-- 图片可先保存到本地 `output/` 或 `storage/`
+- 图片可先保存到本地 `storage/generated/`，缩略图保存到 `storage/thumbnails/`
 
 ## 18. 与当前 gpt-image-2 链路的映射
 

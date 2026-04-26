@@ -68,7 +68,8 @@ GET  /api/generation-tasks/{task_id}/results
 
 ## Mock Provider
 
-The backend writes deterministic placeholder images to `backend/storage/generated/`.
+The backend writes generated images to `backend/storage/generated/` and thumbnails to `backend/storage/thumbnails/`.
+Use `/api/assets/{asset_id}/file?download=1` when the frontend needs a browser download flow.
 It preserves the task lifecycle and metadata shape needed for the real `gpt-image-2` provider later.
 
 ## Configuration Reference
@@ -89,7 +90,7 @@ It preserves the task lifecycle and metadata shape needed for the real `gpt-imag
 | `MOYUAN_DEFAULT_QUALITY` | `low` | Default generation quality |
 | `MOYUAN_DEFAULT_OUTPUT_FORMAT` | `jpeg` | Default output format |
 | `MOYUAN_DEFAULT_OUTPUT_COMPRESSION` | `50` | JPEG/WebP compression setting |
-| `MOYUAN_GENERATION_TIMEOUT_SECONDS` | `120` | Future provider timeout |
+| `MOYUAN_GENERATION_TIMEOUT_SECONDS` | `900` | Upstream image provider timeout for long-running generations |
 | `MOYUAN_MAX_GENERATION_COUNT` | `4` | Max images per task request |
 | `MOYUAN_DATABASE_URL` | SQLite placeholder | Future database URL |
 | `MOYUAN_REDIS_URL` | Redis placeholder | Future queue/cache URL |
