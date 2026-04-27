@@ -11,6 +11,18 @@ IMAGE_TYPE_LABELS = {
     "variant_batch": "ecommerce image variant",
 }
 
+TEMU_COMPLIANCE_PROMPT = [
+    "Apply Temu product image compliance as an additional platform standard.",
+    "Use a clean ecommerce composition suitable for platform upload; prefer 1:1 square product images and 1600x1600 export when the selected output size allows it.",
+    "Keep the product complete with intact edges, stable center of gravity, realistic perspective, and proportional scale.",
+    "For main images, use a single product hero with the longest side filling the frame while keeping safe margins on all sides.",
+    "For scene images, keep the background clean, uncluttered, realistic, and limited to no more than three dominant colors.",
+    "For combination products, keep every item physically plausible in scale, perspective, placement, and scene logic.",
+    "For model scenes, keep the model natural and realistic, with normal facial and body proportions, no heavy filters, and the product clearly visible.",
+    "Do not create collages, split-screen layouts, text overlays, Chinese text, watermark, sticker labels, price tags, ratings, promotional claims, or messy props.",
+    "Output should feel like clean commercial ecommerce photography, PNG/JPG ready, platform-safe and upload-friendly.",
+]
+
 
 def optimize_user_prompt(value: str | None) -> str | None:
     if not value:
@@ -30,7 +42,8 @@ def optimize_user_prompt(value: str | None) -> str | None:
 
 def build_prompt(request: GenerationTaskCreate) -> str:
     params = request.params
-    optimized_prompt = optimize_user_prompt(params.prompt)
+    normalized_prompt = " ".join(params.prompt.replace("\n", " ").split()) if params.prompt else None
+    optimized_prompt = optimize_user_prompt(params.prompt) if params.optimize_prompt else normalized_prompt
     prompt_parts = [
         f"Create a high-quality {IMAGE_TYPE_LABELS[request.image_type]}.",
         f"Project id: {request.project_id}.",
@@ -41,8 +54,13 @@ def build_prompt(request: GenerationTaskCreate) -> str:
         prompt_parts.append(
             "Use the uploaded source image as the factual product reference and preserve its visible appearance."
         )
+    if params.platform and params.platform.lower() == "temu":
+        prompt_parts.extend(TEMU_COMPLIANCE_PROMPT)
     if optimized_prompt:
-        prompt_parts.append(optimized_prompt)
+        if params.optimize_prompt:
+            prompt_parts.append(optimized_prompt)
+        else:
+            prompt_parts.append(f"User creative direction: {optimized_prompt}.")
     if params.scene:
         prompt_parts.append(f"Scene: {params.scene}.")
     if params.background:

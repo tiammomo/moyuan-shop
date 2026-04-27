@@ -14,11 +14,17 @@ def preview_prompt(request: GenerationTaskCreate) -> DataResponse[PromptPreviewR
     warnings = []
     if not request.params.prompt:
         warnings.append("未填写创意描述，将只使用商品信息和默认电商约束生成 Prompt。")
+    if not request.params.optimize_prompt:
+        warnings.append("已关闭提示词优化，将按你填写的 Prompt 原文生成。")
+    if request.params.platform and request.params.platform.lower() == "temu":
+        warnings.append("已叠加 Temu 图片规范：方形构图、主体完整、背景清爽、无文字水印标签。")
+        if request.params.aspect_ratio != "1:1" and request.params.size != "1024x1024":
+            warnings.append("Temu 商品图建议使用 1:1 方形尺寸；当前仍会按你选择的尺寸生成。")
     if request.params.include_text:
         warnings.append("精确文案建议由前端后处理叠加，避免依赖模型生成可读文字。")
     return DataResponse(
         data=PromptPreviewRead(
-            optimized_prompt=optimize_user_prompt(request.params.prompt),
+            optimized_prompt=optimize_user_prompt(request.params.prompt) if request.params.optimize_prompt else None,
             rendered_prompt=build_prompt(request),
             warnings=warnings,
         )

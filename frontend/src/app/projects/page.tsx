@@ -10,63 +10,59 @@ const projects = [
 
 export default function ProjectsPage() {
   return (
-    <div className={styles.container}>
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
-          <Link href="/" className={styles.logo}>
-            <span className={styles.logoIcon}>墨</span>
-            <span className={styles.logoText}>墨圆AI生图</span>
-          </Link>
-          <nav className={styles.nav}>
-            <Link href="/" className={styles.navItem}>首页</Link>
-            <Link href="/projects" className={styles.navItem}>项目</Link>
-            <Link href="/templates" className={styles.navItem}>模板</Link>
-            <Link href="/settings" className={styles.navItem}>设置</Link>
-          </nav>
-          <div className={styles.headerActions}>
-            <Link href="/projects/new" className={styles.btnPrimary}>
-              新建项目
+    <div className={styles.shell}>
+      <aside className={styles.sidebar} aria-label="主导航">
+        <Link href="/" className={styles.brandMark} aria-label="墨圆AI电商宣传图">
+          <span>墨</span>
+        </Link>
+        <nav className={styles.sideNav}>
+          <Link href="/projects" className={`${styles.sideNavItem} ${styles.sideNavItemActive}`}><span>□</span><small>项目</small></Link>
+          <Link href="/templates" className={styles.sideNavItem}><span>▧</span><small>模板</small></Link>
+          <Link href="/projects/new" className={styles.sideNavItem}><span>＋</span><small>新建</small></Link>
+        </nav>
+      </aside>
+
+      <div className={styles.workspace}>
+        <main className={styles.main}>
+          <div className={styles.pageHeader}>
+            <div>
+              <h1 className={styles.title}>我的项目</h1>
+              <p className={styles.subtitle}>管理你的电商宣传图制作项目</p>
+            </div>
+            <Link href="/projects/new" className={styles.btnPrimary}>新建项目</Link>
+          </div>
+
+          <div className={styles.projectsGrid}>
+            {projects.map((project) => (
+              <Link key={project.id} href={`/projects/${project.id}`} className={styles.projectCard}>
+                <div className={styles.projectHeader}>
+                  <div className={styles.projectAvatar}>
+                    {project.name.charAt(0)}
+                  </div>
+                  <span className={`${styles.projectStatus} ${styles[project.status]}`}>
+                    {project.status === 'active' ? '进行中' : '已暂停'}
+                  </span>
+                </div>
+                <h3 className={styles.projectName}>{project.name}</h3>
+                <span className={styles.projectBrand}>{project.brand}</span>
+                <div className={styles.projectStats}>
+                  <span>{project.products} 个商品</span>
+                  <span>·</span>
+                  <span>{project.tasks} 个任务</span>
+                </div>
+                <div className={styles.projectFooter}>
+                  <span className={styles.projectUpdated}>最后更新：{project.updated}</span>
+                </div>
+              </Link>
+            ))}
+
+            <Link href="/projects/new" className={styles.addProjectCard}>
+              <span className={styles.addIcon}>+</span>
+              <span className={styles.addText}>创建新项目</span>
             </Link>
           </div>
-        </div>
-      </header>
-
-      <main className={styles.main}>
-        <div className={styles.pageHeader}>
-          <h1 className={styles.title}>我的项目</h1>
-          <p className={styles.subtitle}>管理你的电商图片项目</p>
-        </div>
-
-        <div className={styles.projectsGrid}>
-          {projects.map((project) => (
-            <Link key={project.id} href={`/projects/${project.id}`} className={styles.projectCard}>
-              <div className={styles.projectHeader}>
-                <div className={styles.projectAvatar}>
-                  {project.name.charAt(0)}
-                </div>
-                <span className={`${styles.projectStatus} ${styles[project.status]}`}>
-                  {project.status === 'active' ? '进行中' : '已暂停'}
-                </span>
-              </div>
-              <h3 className={styles.projectName}>{project.name}</h3>
-              <span className={styles.projectBrand}>{project.brand}</span>
-              <div className={styles.projectStats}>
-                <span>{project.products} 个商品</span>
-                <span>·</span>
-                <span>{project.tasks} 个任务</span>
-              </div>
-              <div className={styles.projectFooter}>
-                <span className={styles.projectUpdated}>最后更新：{project.updated}</span>
-              </div>
-            </Link>
-          ))}
-
-          <Link href="/projects/new" className={styles.addProjectCard}>
-            <span className={styles.addIcon}>+</span>
-            <span className={styles.addText}>创建新项目</span>
-          </Link>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

@@ -25,6 +25,7 @@ class GenerationInputParams(BaseModel):
     output_format: OutputFormat = "jpeg"
     output_compression: int | None = Field(default=50, ge=0, le=100)
     prompt: str | None = None
+    optimize_prompt: bool = True
     background: str | None = None
     style: str | None = None
     lighting: str | None = None

@@ -8,6 +8,7 @@ import styles from './page.module.css';
 
 type ImageType = 'main_image' | 'lifestyle_scene' | 'detail_image' | 'detail_set' | 'campaign' | 'social_post' | 'variant_batch';
 type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
+type PlatformStandard = 'generic' | 'temu';
 type TaskStatus = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
 type GenerationStep = 'idle' | 'optimizing' | 'uploading' | 'creating' | 'queued' | 'running' | 'saving' | 'completed' | 'failed';
 
@@ -68,6 +69,19 @@ const sizes = [
   { id: '1024x1536', name: '2:3 竖向', desc: '适合Instagram' },
 ];
 
+const platformStandards = [
+  {
+    id: 'generic',
+    name: '通用电商',
+    desc: '适合淘宝、京东、独立站等常规商品展示',
+  },
+  {
+    id: 'temu',
+    name: 'Temu 图片规范',
+    desc: '叠加 Temu 主图、场景图、组合图和无文字水印要求',
+  },
+];
+
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_ATTEMPTS = 240;
 const MAX_SOURCE_IMAGE_COUNT = 16;
@@ -81,6 +95,7 @@ const WAITING_GIFS = [
 export default function NewProjectPage() {
   const [selectedType, setSelectedType] = useState<ImageType>('main_image');
   const [selectedSize, setSelectedSize] = useState<ImageSize>('1024x1024');
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformStandard>('generic');
   const [prompt, setPrompt] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [productName, setProductName] = useState('');
@@ -101,12 +116,18 @@ export default function NewProjectPage() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [waitingGif, setWaitingGif] = useState(WAITING_GIFS[0]);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [shouldOptimizePrompt, setShouldOptimizePrompt] = useState(true);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const type = searchParams.get('type');
     if (imageTypes.some((item) => item.id === type)) {
       setSelectedType(type as ImageType);
+    }
+    const platform = searchParams.get('platform');
+    if (platformStandards.some((item) => item.id === platform)) {
+      setSelectedPlatform(platform as PlatformStandard);
     }
     const template = getBuiltInPromptTemplate(searchParams.get('template'));
     if (template) {
@@ -165,7 +186,9 @@ export default function NewProjectPage() {
     setErrorMessage(null);
 
     try {
-      await previewPrompt(true);
+      if (shouldOptimizePrompt) {
+        await previewPrompt(true);
+      }
       setGenerationStep(sourceFiles.length > 0 ? 'uploading' : 'creating');
       const sourceAssetIds = sourceFiles.length > 0 ? await uploadSourceAssets(sourceFiles) : [];
       setGenerationStep('creating');
@@ -178,7 +201,7 @@ export default function NewProjectPage() {
       });
 
       if (!createResponse.ok) {
-        throw new Error('创建生图任务失败，请检查后端服务是否正常。');
+        throw new Error(await readErrorDetail(createResponse, '创建生图任务失败，请检查后端服务是否正常。'));
       }
 
       const createdTask = await createResponse.json() as GenerationTaskResponse;
@@ -220,7 +243,7 @@ export default function NewProjectPage() {
         body: JSON.stringify(buildTaskRequest(buildPreviewSourceAssetIds(sourceFiles.length))),
       });
       if (!response.ok) {
-        throw new Error('优化提示词失败，请检查后端服务是否正常。');
+        throw new Error(await readErrorDetail(response, '优化提示词失败，请检查后端服务是否正常。'));
       }
       const payload = await response.json() as PromptPreviewResponse;
       setOptimizedPrompt(payload.data.rendered_prompt);
@@ -244,19 +267,26 @@ export default function NewProjectPage() {
     source_asset_ids: sourceAssetIds,
     params: {
       prompt: buildPrompt(productName, productDesc, prompt),
+      platform: selectedPlatform,
+      aspect_ratio: selectedSize === '1024x1024' ? '1:1' : selectedSize === '1536x1024' ? '3:2' : '2:3',
       size: selectedSize,
       quality: 'low',
       output_format: 'jpeg',
       output_compression: 50,
-      background: 'clean ecommerce studio background',
-      style: 'clean trustworthy ecommerce product photography',
-      composition: 'centered product hero with safe margins',
+      optimize_prompt: shouldOptimizePrompt,
+      background: selectedPlatform === 'temu' ? 'clean uncluttered ecommerce background with no more than three dominant background colors' : 'clean ecommerce studio background',
+      style: selectedPlatform === 'temu' ? 'realistic Temu-compliant ecommerce product photography, no text, no watermark, no labels' : 'clean trustworthy ecommerce product photography',
+      composition: selectedPlatform === 'temu' ? 'centered stable composition, complete product edges, longest product side fills the frame while leaving safe margins' : 'centered product hero with safe margins',
       include_text: false,
     },
     negative_constraints: [
       'Do not change the product color, shape, material, or structure',
       'Do not add logos, fake certification badges, prices, ratings, or extra accessories',
       'Do not exaggerate product performance or create unsupported claims',
+      ...(selectedPlatform === 'temu' ? [
+        'Temu compliance: no Chinese text, no readable text, no watermark, no sticker labels, no collage, no cluttered background',
+        'Temu compliance: keep the complete product visible with intact edges, stable center of gravity, realistic perspective and proportional scale',
+      ] : []),
     ],
     count: 1,
   });
@@ -307,7 +337,7 @@ export default function NewProjectPage() {
       await sleep(POLL_INTERVAL_MS);
       const response = await fetch(`${API_BASE_URL}/api/generation-tasks/${id}`);
       if (!response.ok) {
-        throw new Error('查询任务状态失败，请检查后端服务。');
+        throw new Error(await readErrorDetail(response, '查询任务状态失败，请检查后端服务。'));
       }
       const payload = await response.json() as GenerationTaskResponse;
       setTaskStatus(payload.data.status);
@@ -327,226 +357,414 @@ export default function NewProjectPage() {
   const fetchResults = async (id: string) => {
     const response = await fetch(`${API_BASE_URL}/api/generation-tasks/${id}/results`);
     if (!response.ok) {
-      throw new Error('获取生成结果失败。');
+      throw new Error(await readErrorDetail(response, '获取生成结果失败。'));
     }
     const payload = await response.json() as GenerationResultsResponse;
     return payload.data;
   };
 
+  const selectedTypeInfo = imageTypes.find((type) => type.id === selectedType) || imageTypes[0];
+  const selectedSizeInfo = sizes.find((size) => size.id === selectedSize) || sizes[0];
+  const selectedPlatformInfo = platformStandards.find((platform) => platform.id === selectedPlatform) || platformStandards[0];
+  const selectedTemplateInfo = selectedTemplateId ? BUILT_IN_PROMPT_TEMPLATES.find((item) => item.id === selectedTemplateId) : null;
+  const hasActiveTask = taskStatus !== 'idle' || Boolean(errorMessage) || results.length > 0;
+  const shouldShowTaskStatus = taskStatus !== 'idle' && !(taskStatus === 'succeeded' && results.length > 0);
+  const primaryResult = results[0] || null;
+
   return (
-    <div className={styles.container}>
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
-          <Link href="/" className={styles.logo}>
-            <span className={styles.logoIcon}>墨</span>
-            <span className={styles.logoText}>墨圆AI生图</span>
-          </Link>
-          <nav className={styles.nav}>
-            <Link href="/" className={styles.navItem}>首页</Link>
-            <Link href="/projects" className={styles.navItem}>项目</Link>
-            <Link href="/templates" className={styles.navItem}>模板</Link>
-            <Link href="/settings" className={styles.navItem}>设置</Link>
-          </nav>
-          <div className={styles.headerActions}>
-            <Link href="/projects" className={styles.btnSecondary}>
-              取消
-            </Link>
-          </div>
-        </div>
-      </header>
+    <div className={styles.shell}>
+      <aside className={styles.sidebar} aria-label="主导航">
+        <Link href="/" className={styles.brandMark} aria-label="墨圆AI电商宣传图">
+          <span>墨</span>
+        </Link>
+        <nav className={styles.sideNav}>
+          <Link href="/projects" className={styles.sideNavItem}><span>□</span><small>项目</small></Link>
+          <Link href="/templates" className={styles.sideNavItem}><span>▧</span><small>模板</small></Link>
+          <Link href="/projects/new" className={`${styles.sideNavItem} ${styles.sideNavItemActive}`}><span>＋</span><small>新建</small></Link>
+        </nav>
+      </aside>
 
       <main className={styles.main}>
         <div className={styles.formContainer}>
-          <h1 className={styles.title}>新建生成任务</h1>
-          <p className={styles.subtitle}>选择图片类型，填写商品信息，开始AI生图</p>
+          <div className={styles.workspaceGrid}>
+            <aside className={styles.settingsColumn}>
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <h2 className={styles.sectionTitle}>设置</h2>
+                    <p className={styles.sectionHint}>类型、尺寸和创作策略</p>
+                  </div>
+                </div>
+                <div className={styles.blockGroup}>
+                  <h3 className={styles.blockTitle}>制作类型</h3>
+                  <div className={styles.pickerField}>
+                    <button type="button" className={styles.pickerTrigger}>
+                      <span className={styles.pickerCurrent}>
+                        <span className={styles.typeIcon} style={{ color: selectedTypeInfo.color }}>{selectedTypeInfo.icon}</span>
+                        <span>
+                          <strong>{selectedTypeInfo.name}</strong>
+                          <small>{selectedTypeInfo.desc}</small>
+                        </span>
+                      </span>
+                      <span className={styles.pickerChevron}>⌄</span>
+                    </button>
+                    <div className={styles.pickerMenu}>
+                      {imageTypes.map((type) => (
+                        <button
+                          key={type.id}
+                          type="button"
+                          className={`${styles.pickerOption} ${selectedType === type.id ? styles.selected : ''}`}
+                          onClick={(event) => {
+                            setSelectedType(type.id as ImageType);
+                            event.currentTarget.blur();
+                          }}
+                          style={{ '--type-color': type.color } as React.CSSProperties}
+                        >
+                          <span className={styles.typeIcon} style={{ color: type.color }}>{type.icon}</span>
+                          <span>
+                            <strong>{type.name}</strong>
+                            <small>{type.desc}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>选择图片类型</h2>
-            <div className={styles.typeGrid}>
-              {imageTypes.map((type) => (
-                <button
-                  key={type.id}
-                  className={`${styles.typeCard} ${selectedType === type.id ? styles.selected : ''}`}
-                  onClick={() => setSelectedType(type.id as ImageType)}
-                  style={{ '--type-color': type.color } as React.CSSProperties}
-                >
-                  <span className={styles.typeIcon} style={{ color: type.color }}>{type.icon}</span>
-                  <span className={styles.typeName}>{type.name}</span>
-                  <span className={styles.typeDesc}>{type.desc}</span>
+                <div className={styles.blockGroup}>
+                  <h3 className={styles.blockTitle}>平台规范</h3>
+                  <div className={styles.pickerField}>
+                    <button type="button" className={styles.pickerTrigger}>
+                      <span className={styles.pickerCurrent}>
+                        <span>
+                          <strong>{selectedPlatformInfo.name}</strong>
+                          <small>{selectedPlatformInfo.desc}</small>
+                        </span>
+                      </span>
+                      <span className={styles.pickerChevron}>⌄</span>
+                    </button>
+                    <div className={styles.pickerMenu}>
+                      {platformStandards.map((platform) => (
+                        <button
+                          key={platform.id}
+                          type="button"
+                          className={`${styles.pickerOption} ${selectedPlatform === platform.id ? styles.selected : ''}`}
+                          onClick={(event) => {
+                            setSelectedPlatform(platform.id as PlatformStandard);
+                            setOptimizedPrompt(null);
+                            setPromptWarnings([]);
+                            event.currentTarget.blur();
+                          }}
+                        >
+                          <span>
+                            <strong>{platform.name}</strong>
+                            <small>{platform.desc}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.blockGroup}>
+                  <h3 className={styles.blockTitle}>图片尺寸</h3>
+                  <div className={styles.pickerField}>
+                    <button type="button" className={styles.pickerTrigger}>
+                      <span className={styles.pickerCurrent}>
+                        <span>
+                          <strong>{selectedSizeInfo.name}</strong>
+                          <small>{selectedSizeInfo.desc}</small>
+                        </span>
+                      </span>
+                      <span className={styles.pickerChevron}>⌄</span>
+                    </button>
+                    <div className={styles.pickerMenu}>
+                      {sizes.map((size) => (
+                        <button
+                          key={size.id}
+                          type="button"
+                          className={`${styles.pickerOption} ${selectedSize === size.id ? styles.selected : ''}`}
+                          onClick={(event) => {
+                            setSelectedSize(size.id as ImageSize);
+                            event.currentTarget.blur();
+                          }}
+                        >
+                          <span>
+                            <strong>{size.name}</strong>
+                            <small>{size.desc}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.blockGroup}>
+                  <h3 className={styles.blockTitle}>创作策略</h3>
+                  <div className={styles.pickerField}>
+                    <button type="button" className={styles.pickerTrigger}>
+                      <span className={styles.pickerCurrent}>
+                        <span>
+                          <strong>{selectedTemplateInfo?.name || '自定义提示词'}</strong>
+                          <small>{selectedTemplateInfo?.description || '保留当前手写提示词，不套用模板'}</small>
+                        </span>
+                      </span>
+                      <span className={styles.pickerChevron}>⌄</span>
+                    </button>
+                    <div className={styles.pickerMenu}>
+                      <button
+                        type="button"
+                        className={`${styles.pickerOption} ${selectedTemplateId === null ? styles.selected : ''}`}
+                        onClick={(event) => {
+                          setSelectedTemplateId(null);
+                          setOptimizedPrompt(null);
+                          setPromptWarnings([]);
+                          event.currentTarget.blur();
+                        }}
+                      >
+                        <span>
+                          <strong>自定义提示词</strong>
+                          <small>保留当前手写提示词，不套用模板</small>
+                        </span>
+                      </button>
+                      {BUILT_IN_PROMPT_TEMPLATES.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          className={`${styles.pickerOption} ${selectedTemplateId === template.id ? styles.selected : ''}`}
+                          onClick={(event) => {
+                            applyPromptTemplate(template.id);
+                            event.currentTarget.blur();
+                          }}
+                        >
+                          <span>
+                            <strong>{template.name}</strong>
+                            <small>{template.description}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className={styles.summaryPanel}>
+                <div className={styles.summaryHeader}>
+                  <span className={styles.summaryEyebrow}>制作摘要</span>
+                  <span className={styles.summaryBadge}>{hasActiveTask ? getStatusLabel(taskStatus) : '待生成'}</span>
+                </div>
+                <div className={styles.summaryHero}>
+                  <span className={styles.summaryIcon} style={{ color: selectedTypeInfo.color }}>{selectedTypeInfo.icon}</span>
+                  <div>
+                    <h2 className={styles.summaryTitle}>{selectedTypeInfo.name}</h2>
+                    <p className={styles.summaryText}>{selectedTypeInfo.desc}</p>
+                  </div>
+                </div>
+                <dl className={styles.summaryList}>
+                  <div>
+                    <dt>尺寸</dt>
+                    <dd>{selectedSizeInfo.name}</dd>
+                  </div>
+                  <div>
+                    <dt>平台规范</dt>
+                    <dd>{selectedPlatformInfo.name}</dd>
+                  </div>
+                  <div>
+                    <dt>商品图</dt>
+                    <dd>{sourceFiles.length > 0 ? `已选择 ${sourceFiles.length} 张` : '待上传'}</dd>
+                  </div>
+                  <div>
+                    <dt>创作策略</dt>
+                    <dd>{selectedTemplateInfo?.name || '自定义提示词'}</dd>
+                  </div>
+                  <div>
+                    <dt>提示词优化</dt>
+                    <dd>{shouldOptimizePrompt ? '开启' : '关闭'}</dd>
+                  </div>
+                  <div>
+                    <dt>商品名称</dt>
+                    <dd>{productName || '未填写'}</dd>
+                  </div>
+                </dl>
+                <button className={styles.btnPrimary} onClick={handleSubmit} disabled={isSubmitting}>
+                  {isSubmitting ? '生成中' : '开始生成'}
                 </button>
-              ))}
-            </div>
-          </div>
+              </section>
+            </aside>
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>选择尺寸</h2>
-            <div className={styles.sizeGrid}>
-              {sizes.map((size) => (
-                <button
-                  key={size.id}
-                  className={`${styles.sizeCard} ${selectedSize === size.id ? styles.selected : ''}`}
-                  onClick={() => setSelectedSize(size.id as ImageSize)}
-                >
-                  <span className={styles.sizeName}>{size.name}</span>
-                  <span className={styles.sizeDesc}>{size.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+            <div className={styles.contentColumn}>
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <h2 className={styles.sectionTitle}>商品与提示词</h2>
+                    <p className={styles.sectionHint}>上传商品图，填写卖点和画面方向</p>
+                  </div>
+                </div>
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>商品信息</h2>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>商品原图</label>
-              <label className={styles.uploadBox}>
-                <input
-                  type="file"
-                  className={styles.fileInput}
-                  accept="image/png,image/jpeg,image/webp"
-                  multiple
-                  onChange={(event) => {
-                    const selectedFiles = Array.from(event.target.files || []);
-                    const files = selectedFiles.slice(0, MAX_SOURCE_IMAGE_COUNT);
-                    setSourceFiles(files);
-                    setUploadedAssets([]);
-                    setOptimizedPrompt(null);
-                    setPromptWarnings([]);
-                    setUploadWarning(
-                      selectedFiles.length > MAX_SOURCE_IMAGE_COUNT
-                        ? `最多支持 ${MAX_SOURCE_IMAGE_COUNT} 张参考图，已保留前 ${MAX_SOURCE_IMAGE_COUNT} 张。`
-                        : null,
-                    );
-                  }}
-                />
-                {sourcePreviewUrls.length > 0 ? (
-                  <span className={styles.sourcePreviewGrid}>
-                    {sourcePreviewUrls.map((previewUrl, index) => (
-                      <img
-                        key={`${sourceFiles[index]?.name || 'source'}-${previewUrl}`}
-                        src={previewUrl}
-                        alt={`商品参考图 ${index + 1}`}
-                        className={styles.sourcePreview}
-                      />
-                    ))}
-                  </span>
-                ) : (
-                  <span className={styles.uploadPlaceholder}>
-                    可上传一张或多张商品参考图，最多 {MAX_SOURCE_IMAGE_COUNT} 张，用于图生图时综合保持外观、颜色、结构和细节
-                  </span>
-                )}
-              </label>
-              {sourceFiles.length > 0 && (
-                <div className={styles.uploadMetaList}>
-                  <p className={styles.uploadMeta}>
-                    已选择 {sourceFiles.length} 张参考图
-                    {uploadedAssets.length > 0 ? ` · 已上传 ${uploadedAssets.length} 张` : ''}
-                  </p>
-                  {sourceFiles.map((file, index) => {
-                    const uploadedAsset = uploadedAssets[index];
-                    return (
-                      <p key={`${file.name}-${file.lastModified}`} className={styles.uploadMeta}>
-                        {index + 1}. {file.name} · {Math.max(1, Math.round(file.size / 1024))} KB
-                        {uploadedAsset ? ` · ${uploadedAsset.width || '-'} x ${uploadedAsset.height || '-'}` : ''}
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>商品原图</label>
+                  <label className={styles.uploadBox}>
+                    <input
+                      type="file"
+                      className={styles.fileInput}
+                      accept="image/png,image/jpeg,image/webp"
+                      multiple
+                      onChange={(event) => {
+                        const selectedFiles = Array.from(event.target.files || []);
+                        const files = selectedFiles.slice(0, MAX_SOURCE_IMAGE_COUNT);
+                        setSourceFiles(files);
+                        setUploadedAssets([]);
+                        setOptimizedPrompt(null);
+                        setPromptWarnings([]);
+                        setUploadWarning(
+                          selectedFiles.length > MAX_SOURCE_IMAGE_COUNT
+                            ? `最多支持 ${MAX_SOURCE_IMAGE_COUNT} 张参考图，已保留前 ${MAX_SOURCE_IMAGE_COUNT} 张。`
+                            : null,
+                        );
+                      }}
+                    />
+                    {sourcePreviewUrls.length > 0 ? (
+                      <span className={styles.sourcePreviewGrid}>
+                        {sourcePreviewUrls.map((previewUrl, index) => (
+                          <img
+                            key={`${sourceFiles[index]?.name || 'source'}-${previewUrl}`}
+                            src={previewUrl}
+                            alt={`商品参考图 ${index + 1}`}
+                            className={styles.sourcePreview}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      <span className={styles.uploadPlaceholder}>
+                        <strong>上传商品图</strong>
+                        <small>支持 JPG / PNG / WebP，最多 {MAX_SOURCE_IMAGE_COUNT} 张</small>
+                      </span>
+                    )}
+                  </label>
+                  {sourceFiles.length > 0 && (
+                    <div className={styles.uploadMetaList}>
+                      <p className={styles.uploadMeta}>
+                        已选择 {sourceFiles.length} 张参考图
+                        {uploadedAssets.length > 0 ? ` · 已上传 ${uploadedAssets.length} 张` : ''}
                       </p>
-                    );
-                  })}
-                  {uploadWarning && <p className={styles.uploadWarning}>{uploadWarning}</p>}
+                      {sourceFiles.slice(0, 2).map((file, index) => {
+                        const uploadedAsset = uploadedAssets[index];
+                        return (
+                          <p key={`${file.name}-${file.lastModified}`} className={styles.uploadMeta}>
+                            {index + 1}. {file.name} · {Math.max(1, Math.round(file.size / 1024))} KB
+                            {uploadedAsset ? ` · ${uploadedAsset.width || '-'} x ${uploadedAsset.height || '-'}` : ''}
+                          </p>
+                        );
+                      })}
+                      {sourceFiles.length > 2 && <p className={styles.uploadMeta}>还有 {sourceFiles.length - 2} 张参考图已保留</p>}
+                      {uploadWarning && <p className={styles.uploadWarning}>{uploadWarning}</p>}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>商品名称</label>
-              <input
-                type="text"
-                className={styles.input}
-                placeholder="输入商品名称"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-              />
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>商品描述</label>
-              <textarea
-                className={styles.textarea}
-                placeholder="描述商品特点、卖点、使用场景等"
-                value={productDesc}
-                onChange={(e) => setProductDesc(e.target.value)}
-                rows={4}
-              />
-            </div>
-          </div>
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>生成描述</h2>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Prompt模板</label>
-              <div className={styles.promptTemplateGrid}>
-                {BUILT_IN_PROMPT_TEMPLATES.map((template) => (
+                <div className={styles.fieldGrid}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>商品名称</label>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      placeholder="输入商品名称"
+                      value={productName}
+                      onChange={(e) => setProductName(e.target.value)}
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>商品描述</label>
+                    <textarea
+                      className={styles.textarea}
+                      placeholder="描述商品特点、卖点、使用场景等"
+                      value={productDesc}
+                      onChange={(e) => setProductDesc(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.promptComposer}>
+                  <div className={styles.promptComposerHeader}>
+                    <label className={styles.label}>自定义提示词</label>
+                    <label className={styles.switchControl}>
+                      <input
+                        type="checkbox"
+                        checked={shouldOptimizePrompt}
+                        onChange={(event) => {
+                          setShouldOptimizePrompt(event.target.checked);
+                          setOptimizedPrompt(null);
+                          setPromptWarnings([]);
+                        }}
+                      />
+                      <span>生成前优化提示词</span>
+                    </label>
+                  </div>
+                  <textarea
+                    className={styles.textarea}
+                    placeholder="可以直接写你想要的画面，例如：可口可乐瓶身在夏日冰块和水珠背景中，横版电商 Banner，商品居中，背景清爽明亮..."
+                    value={prompt}
+                    onChange={(e) => {
+                      setPrompt(e.target.value);
+                      setOptimizedPrompt(null);
+                      setPromptWarnings([]);
+                    }}
+                    rows={3}
+                  />
+                </div>
+
+                <div className={styles.advancedInline}>
                   <button
-                    key={template.id}
-                    className={`${styles.promptTemplateCard} ${selectedTemplateId === template.id ? styles.selected : ''}`}
-                    onClick={() => applyPromptTemplate(template.id)}
+                    type="button"
+                    className={styles.advancedToggle}
+                    onClick={() => setIsAdvancedOpen((isOpen) => !isOpen)}
+                    aria-expanded={isAdvancedOpen}
                   >
-                    <span className={styles.promptTemplateName}>{template.name}</span>
-                    <span className={styles.promptTemplateDesc}>{template.description}</span>
+                    <span>
+                      <strong>高级提示词设置</strong>
+                      <small>查看优化预览和后端最终 Prompt</small>
+                    </span>
+                    <span className={styles.toggleIcon}>{isAdvancedOpen ? '收起' : '展开'}</span>
                   </button>
-                ))}
-              </div>
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Prompt提示词</label>
-              <textarea
-                className={styles.textarea}
-                placeholder="描述你想要的图片效果，例如：现代简约风格，清新配色，商品居中展示，背景纯白..."
-                value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.target.value);
-                  setOptimizedPrompt(null);
-                  setPromptWarnings([]);
-                }}
-                rows={6}
-              />
-            </div>
-            <div className={styles.promptActions}>
-              <button
-                className={styles.btnSecondary}
-                onClick={() => {
-                  void previewPrompt();
-                }}
-                disabled={isOptimizing || isSubmitting}
-              >
-                {isOptimizing ? '优化中' : '优化提示词'}
-              </button>
-            </div>
-            {optimizedPrompt && (
-              <div className={styles.promptPreview}>
-                <div className={styles.promptPreviewHeader}>
-                  <h3 className={styles.promptPreviewTitle}>优化后的提示词</h3>
-                  <span className={styles.promptPreviewMeta}>后端最终 Prompt</span>
+                  {isAdvancedOpen && (
+                    <div className={styles.advancedBody}>
+                      <div className={styles.promptActions}>
+                        <button
+                          className={styles.btnSecondary}
+                          onClick={() => {
+                            void previewPrompt();
+                          }}
+                          disabled={isOptimizing || isSubmitting}
+                        >
+                          {isOptimizing ? '预览中' : shouldOptimizePrompt ? '优化并预览提示词' : '预览最终提示词'}
+                        </button>
+                      </div>
+                      {optimizedPrompt && (
+                        <div className={styles.promptPreview}>
+                          <div className={styles.promptPreviewHeader}>
+                            <h3 className={styles.promptPreviewTitle}>优化后的提示词</h3>
+                            <span className={styles.promptPreviewMeta}>后端最终 Prompt</span>
+                          </div>
+                          <pre className={styles.promptPreviewText}>{optimizedPrompt}</pre>
+                          {promptWarnings.length > 0 && (
+                            <ul className={styles.promptWarningList}>
+                              {promptWarnings.map((warning) => (
+                                <li key={warning}>{warning}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <pre className={styles.promptPreviewText}>{optimizedPrompt}</pre>
-                {promptWarnings.length > 0 && (
-                  <ul className={styles.promptWarningList}>
-                    {promptWarnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
+              </section>
+            </div>
 
-          <div className={styles.actions}>
-            <button className={styles.btnPrimary} onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? '生成中' : '开始生成'}
-            </button>
-            <Link href="/projects" className={styles.btnSecondary}>
-              取消
-            </Link>
-          </div>
-
-          {taskStatus !== 'idle' && (
-            <section className={styles.statusPanel}>
+            <aside className={styles.summaryColumn}>
+              {shouldShowTaskStatus && (
+                <section className={styles.statusPanel}>
               <div className={styles.statusHeader}>
                 <div>
                   <h2 className={styles.statusTitle}>任务状态</h2>
@@ -579,80 +797,69 @@ export default function NewProjectPage() {
                 生图通常需要几十秒到数分钟，页面会每 5 秒自动检查一次，完成后生成图会暂存到 {STORAGE_HINT} 并提供下载。
               </p>
               {taskId && <p className={styles.taskId}>任务 ID：{taskId}</p>}
-            </section>
-          )}
+                </section>
+              )}
 
-          {errorMessage && (
-            <section className={styles.errorPanel}>
-              <h2 className={styles.statusTitle}>生成失败</h2>
-              <p className={styles.statusText}>{errorMessage}</p>
-            </section>
-          )}
+              {errorMessage && (
+                <section className={styles.errorPanel}>
+                  <h2 className={styles.statusTitle}>生成失败</h2>
+                  <p className={styles.statusText}>{errorMessage}</p>
+                </section>
+              )}
 
-          {results.length > 0 && (
-            <section className={styles.resultSection}>
+              {results.length > 0 && (
+                <section className={styles.resultSection}>
               <div className={styles.resultHeader}>
                 <div>
                   <h2 className={styles.sectionTitle}>生成结果</h2>
-                  <p className={styles.resultHint}>图片已暂存到本地 {STORAGE_HINT}，可先下载使用，后续再接导出组件。</p>
+                  <p className={styles.resultHint}>图片已暂存到本地 {STORAGE_HINT}</p>
                 </div>
               </div>
-              {sourcePreviewUrls.length > 0 && (
-                <div className={styles.comparePanel}>
-                  <div>
-                    <span className={styles.compareLabel}>参考图（{sourcePreviewUrls.length} 张）</span>
-                    <div className={styles.compareSourceGrid}>
-                      {sourcePreviewUrls.map((previewUrl, index) => (
-                        <img
-                          key={`${sourceFiles[index]?.name || 'compare'}-${previewUrl}`}
-                          src={previewUrl}
-                          alt={`商品参考图 ${index + 1}`}
-                          className={styles.compareImage}
-                        />
-                      ))}
+              {primaryResult && (() => {
+                const imageUrl = `${API_BASE_URL}${primaryResult.url}`;
+                const downloadUrl = `${imageUrl}?download=1`;
+                const filename = `moyuan-${primaryResult.id}.${primaryResult.format === 'jpeg' ? 'jpg' : primaryResult.format}`;
+                return (
+                  <div className={styles.primaryResult}>
+                    <img
+                      src={imageUrl}
+                      alt="最新生成结果"
+                      className={styles.primaryResultImage}
+                    />
+                    <span className={styles.resultMeta}>
+                      {primaryResult.width} x {primaryResult.height} · {primaryResult.format.toUpperCase()}
+                    </span>
+                    <div className={styles.downloadActions}>
+                      <a className={styles.btnPrimarySmall} href={downloadUrl} download={filename}>
+                        下载图片
+                      </a>
+                      <a className={styles.btnSecondarySmall} href={imageUrl} target="_blank">
+                        打开预览
+                      </a>
                     </div>
                   </div>
-                  <div>
-                    <span className={styles.compareLabel}>生成图</span>
-                    <img
-                      src={`${API_BASE_URL}${results[0].url}`}
-                      alt="生成结果预览"
-                      className={styles.compareImage}
-                    />
-                  </div>
-                </div>
-              )}
-              <div className={styles.resultGrid}>
-                {results.map((result) => {
-                  const imageUrl = `${API_BASE_URL}${result.url}`;
-                  const downloadUrl = `${imageUrl}?download=1`;
-                  const filename = `moyuan-${result.id}.${result.format === 'jpeg' ? 'jpg' : result.format}`;
-                  return (
-                    <div key={result.id} className={styles.resultCard}>
+                );
+              })()}
+              {results.length > 1 && (
+                <div className={styles.resultThumbGrid}>
+                  {results.map((result) => {
+                    const imageUrl = `${API_BASE_URL}${result.thumbnail_url || result.url}`;
+                    return (
                       <a href={imageUrl} target="_blank" className={styles.resultImageLink}>
                         <img
                           src={imageUrl}
                           alt="生成结果"
-                          className={styles.resultImage}
+                          className={styles.resultThumb}
                         />
                       </a>
-                      <span className={styles.resultMeta}>
-                        {result.width} x {result.height} · {result.format.toUpperCase()}
-                      </span>
-                      <div className={styles.downloadActions}>
-                        <a className={styles.btnPrimarySmall} href={downloadUrl} download={filename}>
-                          下载图片
-                        </a>
-                        <a className={styles.btnSecondarySmall} href={imageUrl} target="_blank">
-                          打开预览
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+                    );
+                  })}
+                </div>
+              )}
+                </section>
+              )}
+            </aside>
+          </div>
         </div>
       </main>
     </div>
@@ -748,6 +955,28 @@ function formatElapsed(seconds: number) {
   return `${minutes}:${restSeconds}`;
 }
 
+async function readErrorDetail(response: Response, fallback: string) {
+  let detail = '';
+  try {
+    const payload = await response.json();
+    const rawDetail = payload?.detail || payload?.message || payload?.error?.message;
+    if (Array.isArray(rawDetail)) {
+      detail = rawDetail
+        .map((item) => item?.msg || item?.message || JSON.stringify(item))
+        .filter(Boolean)
+        .join('；');
+    } else if (rawDetail) {
+      detail = String(rawDetail);
+    } else {
+      detail = JSON.stringify(payload);
+    }
+  } catch {
+    detail = await response.text();
+  }
+  const normalized = detail.trim();
+  return normalized ? `${fallback}（HTTP ${response.status}：${normalized}）` : `${fallback}（HTTP ${response.status}）`;
+}
+
 function getRandomWaitingGif(current?: string) {
   if (WAITING_GIFS.length === 1) {
     return WAITING_GIFS[0];
@@ -757,6 +986,9 @@ function getRandomWaitingGif(current?: string) {
 }
 
 function toUserMessage(errorCode: string | null, errorMessage: string | null) {
+  if (errorMessage) {
+    return errorMessage;
+  }
   if (errorCode === 'PROVIDER_AUTH_FAILED') {
     return '模型服务鉴权失败，请检查后端 OPENAI_API_KEY。';
   }
