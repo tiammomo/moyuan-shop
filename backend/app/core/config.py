@@ -9,6 +9,7 @@ Environment = Literal["development", "test", "production"]
 ImageProviderName = Literal["mock", "openai"]
 ImageQuality = Literal["low", "medium", "high"]
 OutputFormat = Literal["jpeg", "png", "webp"]
+StorageBackend = Literal["local", "minio"]
 
 
 class Settings(BaseSettings):
@@ -20,7 +21,13 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"])
 
     storage_dir: Path = Path("storage")
+    storage_backend: StorageBackend = "local"
     public_asset_base_url: str | None = None
+    minio_endpoint: str = "127.0.0.1:9000"
+    minio_access_key: str = "moyuan"
+    minio_secret_key: str = "moyuan_minio_password"
+    minio_bucket: str = "moyuan-images"
+    minio_secure: bool = False
 
     image_provider: ImageProviderName = "mock"
     default_model: str = "gpt-image-2"

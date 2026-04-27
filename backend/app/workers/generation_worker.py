@@ -88,7 +88,11 @@ async def run_generation_task(task_id: str) -> None:
             last_response = response
             total_elapsed_ms += response.elapsed_ms
             suffix = ".jpg" if response.format == "jpeg" else f".{response.format}"
-            file_info = storage_service.save_generated_bytes(response.image_bytes, suffix=suffix)
+            file_info = storage_service.save_generated_bytes(
+                response.image_bytes,
+                suffix=suffix,
+                content_type=f"image/{response.format}",
+            )
             asset_id = f"asset_{uuid4().hex}"
             result_id = f"result_{uuid4().hex}"
             created_at = utc_now()
@@ -106,7 +110,7 @@ async def run_generation_task(task_id: str) -> None:
                 "checksum": file_info["checksum"],
                 "created_at": created_at,
             }
-            thumbnail_info = storage_service.save_thumbnail(file_info["path"], suffix=".jpg")
+            thumbnail_info = storage_service.save_thumbnail_from_bytes(response.image_bytes, suffix=".jpg")
             thumbnail_id = f"asset_{uuid4().hex}"
             thumbnail = {
                 "id": thumbnail_id,
@@ -162,7 +166,7 @@ async def run_generation_task(task_id: str) -> None:
             task = store.tasks[task_id]
             task["status"] = "failed"
             task["error_code"] = map_provider_error_code(exc)
-            task["error_message"] = str(exc)
+            task["error_message"] = build_failure_message(exc)
             task["finished_at"] = now
             task["updated_at"] = now
 
@@ -182,6 +186,49 @@ def map_provider_error_code(exc: Exception) -> str:
     if "OPENAI_API_KEY" in str(exc):
         return "PROVIDER_AUTH_FAILED"
     return "PROVIDER_ERROR"
+
+
+def build_failure_message(exc: Exception) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "模型服务请求超时：后端等待图像生成服务响应超出限制。"
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        detail = extract_response_detail(exc.response)
+        if status_code in {401, 403}:
+            return f"模型服务鉴权失败（HTTP {status_code}）：{detail or '请检查 OPENAI_API_KEY 或代理服务权限。'}"
+        if status_code == 429:
+            return f"模型服务限流（HTTP 429）：{detail or '请求过多或额度不足，请稍后再试。'}"
+        if status_code == 400:
+            return f"模型服务拒绝请求（HTTP 400）：{detail or '请求参数、图片格式或提示词不符合服务要求。'}"
+        if status_code == 413:
+            return f"上传图片过大（HTTP 413）：{detail or '请压缩商品图或减少参考图数量。'}"
+        if status_code == 504:
+            return f"模型服务网关超时（HTTP 504）：{detail or '上游生成耗时过长。'}"
+        return f"模型服务返回错误（HTTP {status_code}）：{detail or str(exc)}"
+    message = str(exc)
+    if "OPENAI_API_KEY" in message:
+        return "模型服务鉴权失败：后端未配置 OPENAI_API_KEY，或当前 provider 需要该密钥。"
+    return message or "生成任务失败：后端未返回具体错误信息。"
+
+
+def extract_response_detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return response.text.strip()[:800]
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            code = error.get("code")
+            if message and code:
+                return f"{message}（code: {code}）"
+            if message:
+                return str(message)
+        detail = body.get("detail") or body.get("message")
+        if detail:
+            return str(detail)
+    return str(body)[:800]
 
 
 def validate_source_assets(request: GenerationTaskCreate) -> None:
@@ -212,9 +259,9 @@ def resolve_source_images(asset_ids: list[str]) -> list[SourceImage]:
     for asset_id, asset in zip(asset_ids, assets, strict=False):
         if asset is None:
             raise ValueError(f"source asset not found: {asset_id}")
-        path = storage_service.resolve_storage_key(asset["storage_key"])
-        if not path.exists():
+        if not storage_service.object_exists(asset["storage_key"]):
             raise ValueError(f"source asset file not found: {asset_id}")
+        path = storage_service.materialize_storage_key(asset["storage_key"])
         source_images.append(
             SourceImage(
                 path=path,
