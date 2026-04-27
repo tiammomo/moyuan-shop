@@ -2,7 +2,8 @@
 
 FastAPI MVP backend for the ecommerce image-generation workflow.
 
-Current behavior uses a mock image provider and does **not** call `gpt-image-2` directly.
+Current behavior can use the mock image provider or the OpenAI-compatible image provider.
+Generated images are stored through the configured storage backend.
 
 ## Setup
 
@@ -32,6 +33,28 @@ API base URL:
 http://localhost:8000/api
 ```
 
+## MinIO Storage
+
+Start the local MinIO service from the repository root:
+
+```bash
+docker compose up -d minio
+```
+
+MinIO endpoints:
+
+```text
+S3 API:  http://127.0.0.1:9000
+Console: http://127.0.0.1:9001
+User:    moyuan
+Pass:    moyuan_minio_password
+Bucket:  moyuan-images
+```
+
+The backend creates the bucket automatically on startup when `MOYUAN_STORAGE_BACKEND=minio`.
+Generated images are saved under `generated/`, thumbnails under `thumbnails/`, and uploaded reference images under `assets/`.
+The homepage reads featured images from `GET /api/assets/featured`, which lists the latest files in `generated/`.
+
 ## Environment
 
 Copy the example file for local development:
@@ -45,12 +68,13 @@ Important defaults:
 ```text
 MOYUAN_IMAGE_PROVIDER=mock
 MOYUAN_STORAGE_DIR=storage
+MOYUAN_STORAGE_BACKEND=minio
 MOYUAN_DEFAULT_MODEL=gpt-image-2
 MOYUAN_MAX_GENERATION_COUNT=4
 ```
 
-`MOYUAN_IMAGE_PROVIDER=mock` must stay enabled until the real OpenAI-compatible provider is implemented.
-`OPENAI_API_KEY` and `OPENAI_BASE_URL` are placeholders only right now and are not used by the mock provider.
+Use `MOYUAN_IMAGE_PROVIDER=mock` for local smoke tests, or `MOYUAN_IMAGE_PROVIDER=openai` for the OpenAI-compatible provider.
+`OPENAI_API_KEY` and `OPENAI_BASE_URL` are only used by the `openai` provider.
 
 Never put provider secrets in frontend env files. Frontend may only use public variables such as `NEXT_PUBLIC_API_URL`.
 
@@ -61,6 +85,8 @@ GET  /api/health
 GET  /api/settings/image-generation
 POST /api/assets
 GET  /api/assets/{asset_id}/file
+GET  /api/assets/featured
+GET  /api/assets/file?storage_key=generated/{filename}
 POST /api/generation-tasks
 GET  /api/generation-tasks/{task_id}
 GET  /api/generation-tasks/{task_id}/results
@@ -68,7 +94,8 @@ GET  /api/generation-tasks/{task_id}/results
 
 ## Mock Provider
 
-The backend writes generated images to `backend/storage/generated/` and thumbnails to `backend/storage/thumbnails/`.
+With local storage, the backend writes generated images to `backend/storage/generated/` and thumbnails to `backend/storage/thumbnails/`.
+With MinIO storage, it writes the same logical keys to the configured bucket.
 Use `/api/assets/{asset_id}/file?download=1` when the frontend needs a browser download flow.
 It preserves the task lifecycle and metadata shape needed for the real `gpt-image-2` provider later.
 
@@ -83,7 +110,13 @@ It preserves the task lifecycle and metadata shape needed for the real `gpt-imag
 | `MOYUAN_API_PREFIX` | `/api` | API route prefix |
 | `MOYUAN_CORS_ORIGINS` | localhost frontend origins | Allowed browser origins |
 | `MOYUAN_STORAGE_DIR` | `storage` | Local file storage directory |
+| `MOYUAN_STORAGE_BACKEND` | `local` | `local` or `minio` |
 | `MOYUAN_PUBLIC_ASSET_BASE_URL` | empty | Optional absolute asset base URL for later deployments |
+| `MOYUAN_MINIO_ENDPOINT` | `127.0.0.1:9000` | MinIO S3 API endpoint |
+| `MOYUAN_MINIO_ACCESS_KEY` | `moyuan` | MinIO access key |
+| `MOYUAN_MINIO_SECRET_KEY` | `moyuan_minio_password` | MinIO secret key |
+| `MOYUAN_MINIO_BUCKET` | `moyuan-images` | Bucket for image assets |
+| `MOYUAN_MINIO_SECURE` | `false` | Use HTTPS for MinIO |
 | `MOYUAN_IMAGE_PROVIDER` | `mock` | `mock` now, `openai` later |
 | `MOYUAN_DEFAULT_MODEL` | `gpt-image-2` | Model name stored in task metadata |
 | `MOYUAN_DEFAULT_SIZE` | `1024x1024` | Default output size |
