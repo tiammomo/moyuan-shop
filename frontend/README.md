@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Moyuan Shop Frontend
 
-## Getting Started
+这是墨圆电商 AI 生图项目的 Next.js 前端。
 
-First, run the development server:
+完整启动说明请优先看仓库根目录的 [README.md](../README.md)。
+
+## 启动
+
+进入前端目录：
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd /mnt/c/Users/caiyu/Desktop/e-commerce/moyuan-shop/frontend
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+安装依赖：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+启动开发服务器：
 
-## Learn More
+```bash
+npm run dev -- --hostname 127.0.0.1 --port 3000
+```
 
-To learn more about Next.js, take a look at the following resources:
+浏览器打开：
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```text
+http://127.0.0.1:3000
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+默认情况下，前端会请求后端：
 
-## Deploy on Vercel
+```text
+http://localhost:8000
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+如果后端使用了其他端口，需要指定 `NEXT_PUBLIC_API_URL`：
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+NEXT_PUBLIC_API_URL=http://127.0.0.1:38110 npm run dev -- --hostname 127.0.0.1 --port 3000
+```
+
+## 常见问题
+
+### 3000 端口被占用
+
+换端口启动：
+
+```bash
+npm run dev -- --hostname 127.0.0.1 --port 3001
+```
+
+然后打开：
+
+```text
+http://127.0.0.1:3001
+```
+
+### 检查类型
+
+```bash
+npx tsc --noEmit
+```
+
+### 生产构建
+
+```bash
+npm run build
+```

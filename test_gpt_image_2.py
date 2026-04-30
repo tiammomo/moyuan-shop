@@ -3,13 +3,14 @@ import argparse
 import base64
 import json
 import os
+import socket
 import sys
 import urllib.error
 import urllib.request
 
 
 DEFAULT_BASE_URL = "https://w.ciykj.cn/v1"
-DEFAULT_PROMPT = "A tiny red paper crane on a wooden table, soft daylight"
+DEFAULT_PROMPT = "牛仔裤，白色背景，单色，简约，写实，高清，正面"
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,6 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-format", default="jpeg", choices=["png", "jpeg", "webp"])
     parser.add_argument("--output", default="test_gpt_image_2.jpg")
     parser.add_argument("--compression", type=int, default=50)
+    parser.add_argument("--timeout", type=int, default=120, help="Request timeout in seconds. Use 0 to disable timeout.")
     return parser.parse_args()
 
 
@@ -57,7 +59,10 @@ def main() -> int:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        timeout = None if args.timeout == 0 else args.timeout
+        timeout_label = "none" if timeout is None else f"{timeout}s"
+        print(f"Requesting {url} with model={args.model}, timeout={timeout_label}")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8")
             request_id = response.headers.get("x-request-id", "")
     except urllib.error.HTTPError as exc:
@@ -70,6 +75,12 @@ def main() -> int:
         return 1
     except urllib.error.URLError as exc:
         print(f"Request failed: {exc}", file=sys.stderr)
+        return 1
+    except TimeoutError as exc:
+        print(f"Request timed out after {args.timeout}s: {exc}", file=sys.stderr)
+        return 1
+    except socket.timeout as exc:
+        print(f"Request timed out after {args.timeout}s: {exc}", file=sys.stderr)
         return 1
 
     try:

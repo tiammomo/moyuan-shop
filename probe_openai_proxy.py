@@ -10,7 +10,7 @@ import urllib.request
 
 
 DEFAULT_BASE_URL = "https://w.ciykj.cn/v1"
-DEFAULT_IMAGE_PROMPT = "A tiny red paper crane on a wooden table, soft daylight"
+DEFAULT_IMAGE_PROMPT = "A tiny boy  on a wooden table, soft daylight"
 DEFAULT_CHAT_PROMPT = "Reply with exactly OK."
 PREFERRED_CHAT_MODELS = [
     "gpt-5.4-mini",

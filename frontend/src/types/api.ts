@@ -37,6 +37,13 @@ export interface Asset {
   created_at: string;
 }
 
+export interface FeaturedImage {
+  storage_key: string;
+  url: string;
+  file_size: number;
+  created_at: string;
+}
+
 export type GenerationTaskStatus = 'created' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
 export type ImageType =
   | 'main_image'
@@ -77,6 +84,7 @@ export interface GenerationInputParams {
   quality: 'low' | 'medium' | 'high';
   output_format: 'jpeg' | 'png' | 'webp';
   output_compression?: number;
+  optimize_prompt?: boolean;
   platform?: string;
   aspect_ratio?: string;
   style?: string;
